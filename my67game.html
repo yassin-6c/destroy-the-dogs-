@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cat Shooter: Boss Fight</title>
+<style>
+html, body { margin:0; padding:0; overflow:hidden; background:#c8e6c9; font-family:Arial; }
+canvas { display:block; }
+#loseGif { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); display:none; width:150px; }
+#controls { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:20px; z-index:10; }
+#controls button { padding:15px; font-size:20px; border:none; border-radius:8px; background:#fff; box-shadow:2px 2px 5px rgba(0,0,0,0.3); cursor:pointer; width:80px; height:80px; }
+#creatorBox { position:absolute; top:10px; right:10px; background:linear-gradient(45deg,#ff9a9e,#fad0c4,#fbc2eb); padding:10px; border-radius:10px; width:220px; font-size:12px; color:#333; box-shadow:2px 2px 10px rgba(0,0,0,0.3); overflow-y:auto; }
+#creatorBox img { width:100%; height:auto; border-radius:10px; border:2px solid #fff; }
+#creatorBox h3 { margin:0; font-size:14px; color:#fff; text-shadow:1px 1px 2px black; }
+#creatorBox p { margin:2px 0 0 0; }
+#cheatBox { position:fixed; bottom:10px; right:10px; width:150px; font-size:14px; padding:5px; border-radius:5px; border:none; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+<img id="loseGif" src="https://files.catbox.moe/hihqoz.gif" alt="Game Over Gif">
+
+<div id="controls">
+  <button id="leftBtn">⬅️</button>
+  <button id="rightBtn">➡️</button>
+  <button id="shootBtn">💥</button>
+  <button id="pauseBtn">⏸️</button>
+</div>
+
+<div id="creatorBox">
+  <img src="https://files.catbox.moe/gpl06g.jpeg" alt="Creator Picture">
+  <div>
+    <h3>🎨 Created by Yassin Ayman</h3>
+    <p>
+      This game was made by <strong>Yassin Ayman</strong>, a 12-year-old boy who is half British 🇬🇧 and half Egyptian 🇪🇬.<br>
+      Yassin loves coding, cats 🐱, and making fun challenges for players everywhere!<br>
+      🌟 Game created in 2025 to spread joy!<br>
+      🎮 Tip: Can you defeat the boss at level 100 or the Unicorn Queen at 200?<br>
+      🚀 Have fun and share with your friends!
+    </p>
+  </div>
+</div>
+
+<input id="cheatBox" placeholder="Enter cheat code" />
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = 500; canvas.height = 600;
+
+let cat = { x: canvas.width/2, y: canvas.height-50, size:40, visible:true };
+let hairballs=[], dogs=[], explosions=[];
+let score=0, level=1, dogSpeed=2, lives=3, gameRunning=false, paused=false;
+let multiShot=false, bigHairball=false, freezeDogs=false, freezeTimer=0;
+let autoShoot=false, fastMove=false, spamShoot=false;
+let catSkins=['🐱','😺','😻','🐈','😸','🐈‍⬛'];
+let currentCat = catSkins[0];
+let win=false, bossDog=null, bossHealth=10;
+let unicornQueen=null, unicornHealth=50;
+
+let loseSound = new Audio("https://files.catbox.moe/3wco8q.mp3");
+
+// Music system (plays automatically in order)
+const musicList = [
+  "https://files.catbox.moe/fvzpnb.mp3",
+  "https://files.catbox.moe/0f8ucu.mp3",
+  "https://files.catbox.moe/2wre65.mp3",
+  "https://files.catbox.moe/yc08li.mp3",
+  "https://files.catbox.moe/53e9pt.mp3",
+  "https://files.catbox.moe/6y8zou.mp3",
+  "https://files.catbox.moe/sjj91o.mp3",
+  "https://files.catbox.moe/9zes8u.mp3",
+  "https://files.catbox.moe/ixkuu1.mp3",
+  "https://files.catbox.moe/wd9w8z.mp3"
+];
+let currentMusicIndex=0;
+let bgMusic=new Audio(); bgMusic.volume=0.5;
+
+function playNextMusic() {
+  bgMusic.src = musicList[currentMusicIndex];
+  bgMusic.loop=false;
+  bgMusic.play();
+  bgMusic.onended = () => {
+    currentMusicIndex = (currentMusicIndex+1)%musicList.length;
+    playNextMusic();
+  };
+}
+playNextMusic();
+
+function startGame(){
+  score=0; level=1; dogSpeed=2; lives=3;
+  dogs=[]; hairballs=[]; explosions=[];
+  gameRunning=true; paused=false;
+  multiShot=false; bigHairball=false; freezeDogs=false; freezeTimer=0;
+  autoShoot=false; fastMove=false; spamShoot=false;
+  currentCat=catSkins[0]; win=false; bossDog=null; bossHealth=10; unicornQueen=null; unicornHealth=50;
+  cat.visible=true;
+  document.getElementById('loseGif').style.display='none';
+}
+
+function spawnDog(){
+  if(!gameRunning || win || bossDog || unicornQueen) return;
+  const dogIcons=['🐶','🐕','🦮','🐩'];
+  dogs.push({
+    x: Math.random()*(canvas.width-40), y:-40, size:40,
+    icon:dogIcons[Math.floor(Math.random()*dogIcons.length)]
+  });
+}
+
+function shoot(){
+  if(multiShot){
+    hairballs.push({x:cat.x+10,y:cat.y-20,big:bigHairball});
+    hairballs.push({x:cat.x-10,y:cat.y-20,big:bigHairball});
+    hairballs.push({x:cat.x+30,y:cat.y-20,big:bigHairball});
+  } else {
+    hairballs.push({x:cat.x+10,y:cat.y-20,big:bigHairball});
+  }
+}
+
+function update(){
+  if(paused) return;
+
+  if(autoShoot || spamShoot) shoot();
+  if(fastMove){
+    cat.x = Math.min(canvas.width-40, cat.x+10);
+  }
+
+  hairballs.forEach(h => h.y-=10);
+  dogs.forEach(d => { if(!freezeDogs) d.y+=dogSpeed; });
+  explosions.forEach(e=>e.alpha-=0.05);
+
+  hairballs = hairballs.filter(h=>h.y>-30);
+  dogs = dogs.filter(d=>d.y<canvas.height+30);
+  explosions = explosions.filter(e=>e.alpha>0);
+
+  // Dogs touch cat
+  dogs.forEach((d,di)=>{
+    if(Math.abs(d.x-cat.x)<30 && Math.abs(d.y-cat.y)<30){
+      explosions.push({x:d.x+20,y:d.y+20,alpha:1});
+      dogs.splice(di,1);
+      lives--;
+      if(lives<=0){
+        gameRunning=false; if(bgMusic) bgMusic.pause();
+        loseSound.currentTime=0; loseSound.play();
+        document.getElementById('loseGif').style.display='block';
+      }
+    } else if(d.y>canvas.height){
+      dogs.splice(di,1);
+      lives--;
+      if(lives<=0){
+        gameRunning=false; if(bgMusic) bgMusic.pause();
+        loseSound.currentTime=0; loseSound.play();
+        document.getElementById('loseGif').style.display='block';
+      }
+    }
+  });
+
+  // Hairballs hit dogs
+  dogs.forEach((d,di)=>{
+    hairballs.forEach((h,hi)=>{
+      if(Math.abs(d.x-h.x)<30 && Math.abs(d.y-h.y)<30){
+        explosions.push({x:d.x+20,y:d.y+20,alpha:1});
+        dogs.splice(di,1); hairballs.splice(hi,1);
+        score++;
+        if(score%5===0){
+          level++; dogSpeed+=0.5; currentCat=catSkins[level%catSkins.length];
+          if(level===100) bossDog={x:canvas.width/2-50,y:-150,size:150};
+          if(level===200) unicornQueen={x:canvas.width/2-100,y:-200,size:200};
+        }
+      }
+    });
+  });
+
+  // BossDog behavior
+  if(bossDog){
+    bossDog.y+=0.5; // slow
+    if(bossDog.y>canvas.height-150) bossDog.y=canvas.height-150;
+    hairballs.forEach((h,hi)=>{
+      if(Math.abs(bossDog.x-h.x)<50 && Math.abs(bossDog.y-h.y)<50){
+        explosions.push({x:bossDog.x+50,y:bossDog.y+50,alpha:1});
+        hairballs.splice(hi,1); bossHealth--;
+        if(bossHealth<=0){
+          bossDog=null;
+        }
+      }
+    });
+    if(Math.abs(cat.x-bossDog.x)<50 && Math.abs(cat.y-bossDog.y)<50){
+      lives=0;
+      gameRunning=false; if(bgMusic) bgMusic.pause();
+      loseSound.currentTime=0; loseSound.play();
+      document.getElementById('loseGif').style.display='block';
+    }
+  }
+
+  // Unicorn Queen behavior
+  if(unicornQueen){
+    unicornQueen.y+=0.3; // very slow
+    if(unicornQueen.y>canvas.height-200) unicornQueen.y=canvas.height-200;
+    hairballs.forEach((h,hi)=>{
+      if(Math.abs(unicornQueen.x-h.x)<100 && Math.abs(unicornQueen.y-h.y)<100){
+        explosions.push({x:unicornQueen.x+100,y:unicornQueen.y+100,alpha:1});
+        hairballs.splice(hi,1); unicornHealth--;
+        if(unicornHealth<=0){
+          gameRunning=false;
+          ctx.fillStyle='black'; ctx.fillRect(0,0,canvas.width,canvas.height);
+          ctx.fillStyle='white'; ctx.font='40px Arial';
+          ctx.fillText('U WON! GO GET A JOB',20,300);
+        }
+      }
+    });
+    if(Math.abs(cat.x-unicornQueen.x)<100 && Math.abs(cat.y-unicornQueen.y)<100){
+      lives=0;
+      gameRunning=false; if(bgMusic) bgMusic.pause();
+      loseSound.currentTime=0; loseSound.play();
+      document.getElementById('loseGif').style.display='block';
+    }
+  }
+
+  if(freezeDogs && --freezeTimer<=0) freezeDogs=false;
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if(cat.visible){ ctx.font=`${cat.size}px Arial`; ctx.fillText(currentCat,cat.x,cat.y); }
+  hairballs.forEach(h=>{
+    ctx.font = h.big?'50px Arial':'30px Arial';
+    ctx.fillText('💨',h.x,h.y);
+  });
+  dogs.forEach(d=>{ ctx.font=`${d.size}px Arial`; ctx.fillText(d.icon,d.x,d.y); });
+  if(bossDog){ ctx.font=`${bossDog.size}px Arial`; ctx.fillText('🐶',bossDog.x,bossDog.y); ctx.fillStyle='red'; ctx.fillRect(bossDog.x,bossDog.y-10,bossHealth*10,5); }
+  if(unicornQueen){ ctx.font=`${unicornQueen.size}px Arial`; ctx.fillText('🦄',unicornQueen.x,unicornQueen.y); ctx.fillStyle='red'; ctx.fillRect(unicornQueen.x,unicornQueen.y-10,unicornHealth*4,10); }
+  explosions.forEach(ex=>{ ctx.fillStyle=`rgba(255,0,0,${ex.alpha})`; ctx.beginPath(); ctx.arc(ex.x,ex.y,20,0,Math.PI*2); ctx.fill(); });
+  ctx.fillStyle='black'; ctx.font='18px Arial';
+  ctx.fillText(`Score: ${score} Level: ${level} Lives: ${lives}`,10,30);
+  if(paused){ ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='white'; ctx.font='40px Arial'; ctx.fillText('PAUSED',150,300); }
+}
+
+function loop(){ if(gameRunning) update(); draw(); requestAnimationFrame(loop); }
+loop();
+
+// Controls
+document.addEventListener('keydown', e=>{
+  if(!gameRunning && (e.key===' ' || win)) startGame();
+  else if(gameRunning && !paused){
+    if(e.key==='ArrowLeft') cat.x=Math.max(0,cat.x-(fastMove?60:30));
+    if(e.key==='ArrowRight') cat.x=Math.min(canvas.width-40,cat.x+(fastMove?60:30));
+    if(e.key===' ') shoot();
+  }
+});
+
+document.getElementById('leftBtn').onclick = ()=>{ if(gameRunning && !paused) cat.x=Math.max(0,cat.x-30); };
+document.getElementById('rightBtn').onclick = ()=>{ if(gameRunning && !paused) cat.x=Math.min(canvas.width-40,cat.x+30); };
+document.getElementById('shootBtn').onclick = ()=>{ if(gameRunning && !paused) shoot(); };
+document.getElementById('pauseBtn').onclick = ()=>{
+  if(gameRunning){ paused=!paused; if(bgMusic) paused?bgMusic.pause():bgMusic.play(); }
+};
+
+canvas.onclick = ()=>{
+  if(!gameRunning && !win) startGame();
+  else if(win) startGame();
+  else if(!paused) shoot();
+};
+
+// Spawn dogs
+setInterval(spawnDog,1000);
+
+// Cheat code input
+document.getElementById('cheatBox').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    let val=e.target.value;
+    if(val==='6988') autoShoot=!autoShoot;
+    if(val==='1570') bigHairball=true;
+    if(val==='6767') spamShoot=!spamShoot;
+    if(val==='2167') fastMove=!fastMove;
+    if(val==='8869'){ autoShoot=true; bigHairball=true; spamShoot=true; lives+=10; cat.visible=true; }
+    e.target.value='';
+  }
+});
+</script>
+</body>
+</html>
